@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Onirim</title>
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#1f2240" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="title">ONIRIM</div>
+    <div class="actions">
+      <button id="helpBtn" class="ghost">Ohje</button>
+      <button id="newBtn">Uusi peli</button>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="panel info">
+      <div><b>Pakka:</b> <span id="deckCount">0</span></div>
+      <div><b>Poistopakka:</b> <span id="discardCount">0</span></div>
+      <div style="display:none"><b>Limbo:</b> <span id="limboCount">0</span></div>
+      <div style="display:none"><b>Avaimet:</b> <span id="keysInHand">0</span></div>
+      <div class="status" id="status">Tervetuloa unilabyrinttiin…</div>
+    </section>
+
+    <section class="panel doors">
+      <h2>Ovet (8)</h2>
+      <div id="doorsArea" class="row"></div>
+    </section>
+
+    <section class="panel path">
+      <h2>Polku</h2>
+      <div id="pathArea" class="row"></div>
+    </section>
+
+    <section class="panel hand">
+      <h2>Käsi (valitse/pelaa tai heitä pois)</h2>
+      <div id="handArea" class="row"></div>
+      <div class="hand-actions">
+        <button id="playSelBtn">Sijoita polulle</button>
+        <button id="discardSelBtn" class="ghost">Heitä valittu kortti</button>
+        <button id="keyProphecyBtn" class="ghost">Käytä Avain (ennustus)</button>
+        <button id="resumeDrawBtn" class="ghost" style="display:none">Jatka nostoa</button>
+      </div>
+    </section>
+
+    <section class="panel discard">
+      <h2>Poistopakka</h2>
+      <div id="discardPeek" class="row"></div>
+    </section>
+  </main>
+
+  <!-- Modaalit -->
+  <dialog id="helpDlg">
+    <h3>Onirim – perussäännöt (tiivistelmä)</h3>
+    <ul>
+      <li>Tavoite: avaa 8 ovea (2 kutakin väriä) ennen kuin pakka loppuu.</li>
+      <li>Valitse kädestä kortti ja päätä: <b>Sijoita polulle</b> tai <b>Heitä valittu</b> pois. Avain-kortilla voit myös tehdä <b>Ennustuksen</b>.</li>
+      <li><b>Et saa pelata samaa symbolia peräkkäin</b> polkuun.</li>
+      <li>Kun pelaat kolme <b>samanväristä</b> peräkkäin, vastaava ovi avautuu ja pakka sekoitetaan uudelleen.</li>
+      <li>Nostovaihe täyttää käden 5:een.</li>
+      <li>Jos nostat Oven ja sinulla on <b>Avain samaa väriä</b> kädessä, ovi aukeaa heti (Avain poistopakkaan).</li>
+      <li><b>Ennustus (Avain):</b> katso 5 päällimmäistä, poista yksi (jolloin Ovi → limbo; muut → poistopakka), järjestä loput pakan päälle.</li>
+      <li>Voitat: 8 ovea auki. Häviät: et pysty täydentämään kättä 5:een.</li>
+    </ul>
+    <button id="closeHelp">OK</button>
+  </dialog>
+
+  <dialog id="nightmareDlg">
+    <form method="dialog">
+      <h3>Painajainen!</h3>
+      <p>Valitse rangaistus:</p>
+      <div class="col">
+        <button value="loseDoor" class="danger">Siirrä avattu ovi Limboon</button>
+        <button value="discardKey">Heitä yksi Avain kädestä</button>
+        <button value="mill5">Paljasta 5 päällimmäistä (Paikat poistoon)</button>
+        <button value="discardHand">Heitä koko käsi ja nosta uudet</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="pickDoorDlg">
+    <form method="dialog">
+      <h3>Valitse siirrettävä ovi Limboon</h3>
+      <div id="doorChoices" class="row"></div>
+      <div class="row">
+        <button value="cancel" class="ghost">Peru</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="prophecyDlg">
+    <form method="dialog">
+      <h3>Ennustus (Avain)</h3>
+      <p>Valitse yksi korteista poistoon/limboon ja järjestä loput (ylin vasemmalle):</p>
+      <div id="prophecyCards" class="row"></div>
+      <div class="row controls-fixed">
+        <button id="propLeft" type="button" class="ghost">← Siirrä vasemmalle</button>
+        <button id="propRight" type="button" class="ghost">Siirrä oikealle →</button>
+      </div>
+      <div class="row">
+        <button value="confirm" class="primary">Vahvista</button>
+        <button value="cancel" class="ghost">Peru</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="app.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', ()=>navigator.serviceWorker.register('service-worker.js'));
+    }
+  </script>
+   <footer style="
+  position: fixed;
+  bottom: 4px;
+  right: 6px;
+  font-size: 14px;
+  color: white;
+  padding: 4px;
+  z-index: 9999;
+">
+  Versio 1.0.0
+</footer>
+</body>
+</html>

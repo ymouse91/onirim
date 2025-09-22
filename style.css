@@ -1,0 +1,24 @@
+:root{--bg:#0f1128;--ink:#ecf0ff;--panel:#1b1f3a;--accent:#4e56b9;--accent2:#c4c8ff;--danger:#b53a3a;--ghost:#2a2e57;--cardBorder:#303565;--red:#d95555;--blue:#5aa3e6;--green:#66c19a;--brown:#c59a6b;--sun:#fff0a8;--moon:#bfe1ff;--key:#bff8bf;--door:#ffc2c2;--night:#000}
+*{box-sizing:border-box}html,body{height:100%}body{margin:0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:radial-gradient(1200px 800px at 50% -10%,#20245a 0%,#121433 60%,#0b0d22 100%);color:var(--ink)}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:linear-gradient(180deg,#1e234b,#141739);position:sticky;top:env(safe-area-inset-top);z-index:10}.title{font-weight:700;letter-spacing:.4px}.actions{display:flex;gap:8px}
+button{appearance:none;border:none;border-radius:10px;padding:10px 14px;font-weight:600;background:var(--accent);color:#fff;cursor:pointer;touch-action:manipulation}
+button.ghost{background:var(--ghost);color:var(--accent2)}button.primary{background:var(--accent)}button.danger{background:var(--danger)}button:disabled{opacity:.6;cursor:not-allowed}
+.wrap{display:grid;gap:14px;padding:12px env(safe-area-inset-right) 24px env(safe-area-inset-left);max-width:1200px;margin:0 auto;grid-template-columns:1fr}
+@media(min-width:920px){.wrap{grid-template-columns:1fr 1fr}.doors,.path{grid-column:1/-1}}
+.panel{background:linear-gradient(180deg,#1b1f3a 0%,#161a33 100%);border:1px solid #2b2f59;border-radius:14px;padding:12px;box-shadow:0 10px 30px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.05)}
+.panel h2{margin:4px 0 10px;font-size:1rem;color:#cdd1ff}.info{display:flex;flex-wrap:wrap;gap:12px;align-items:center}.status{flex:1 1 100%;margin-top:4px;padding:8px 10px;background:#0f1335;border-radius:10px;border:1px solid #2b2f59;min-height:36px}
+.row{display:flex;flex-wrap:wrap;gap:10px}.hand-actions{display:flex;gap:10px;margin-top:6px;flex-wrap:wrap}#discardPeek .card{opacity:.85}
+.card{width:94px;height:138px;border-radius:12px;border:2px solid var(--cardBorder);display:flex;align-items:center;justify-content:center;position:relative;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;box-shadow:0 6px 16px rgba(0,0,0,.35);transition:transform .06s ease}
+.card:active{transform:translateY(1px) scale(.99)}.card.badge::after{content:attr(data-sym);position:absolute;top:4px;left:6px;padding:2px 6px;border-radius:8px;background:rgba(0,0,0,.25);color:#fff;font-size:.8rem;font-weight:700}
+.card.red{outline:3px solid rgba(217,85,85,.3)}.card.blue{outline:3px solid rgba(90,163,230,.3)}.card.green{outline:3px solid rgba(102,193,154,.3)}.card.brown{outline:3px solid rgba(197,154,107,.3)}
+.card.sun{background:var(--sun);color:#3b3000}.card.moon{background:var(--moon);color:#0e2a4a}.card.key{background:var(--key);color:#013201}
+.card.door{background:var(--door);color:#5a0e0e}.card.nightmare{background:var(--night);color:#fff;border-color:#444;outline:3px solid rgba(255,0,0,.25)}
+.card.small{width:66px;height:96px}.card.tiny{width:56px;height:82px}
+.sym{font-weight:900;font-size:2rem;letter-spacing:.02em}.sym.sun::before{content:'☼'}.sym.moon::before{content:'☾'}.sym.key::before{content:'🗝️'}.sym.door::before{content:'🗔'}.sym.nightmare::before{content:'🜏'}
+.colorStripe{position:absolute;bottom:0;left:0;right:0;height:10px;border-bottom-left-radius:10px;border-bottom-right-radius:10px}
+.colorStripe.red{background:var(--red)}.colorStripe.blue{background:var(--blue)}.colorStripe.green{background:var(--green)}.colorStripe.brown{background:var(--brown)}
+.card.door.owned{border:3px solid #fff!important;filter:brightness(1.25) drop-shadow(0 0 8px rgba(255,255,255,.6));position:relative}
+.card.door.owned::after{content:"✓";position:absolute;top:-8px;right:-8px;width:24px;height:24px;display:grid;place-items:center;background:#22c55e;color:#06110a;border-radius:50%;font-weight:900;box-shadow:0 2px 6px rgba(0,0,0,.35);border:2px solid #0a2d14}
+#prophecyDlg .controls-fixed{display:flex;gap:10px;align-items:center;justify-content:center;margin:8px 0}
+dialog{border:none;border-radius:14px;padding:16px;background:#171a36;color:var(--ink);max-width:min(680px,96vw);box-shadow:0 24px 60px rgba(0,0,0,.5)}dialog::backdrop{background:rgba(0,0,0,.5)}
+dialog h3{margin-top:0}.col{display:flex;flex-direction:column;gap:10px}.row{margin-top:8px}
