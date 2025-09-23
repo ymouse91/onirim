@@ -3,7 +3,15 @@
 .topbar{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:linear-gradient(180deg,#1e234b,#141739);position:sticky;top:env(safe-area-inset-top);z-index:10}.title{font-weight:700;letter-spacing:.4px}.actions{display:flex;gap:8px}
 button{appearance:none;border:none;border-radius:10px;padding:10px 14px;font-weight:600;background:var(--accent);color:#fff;cursor:pointer;touch-action:manipulation}
 button.ghost{background:var(--ghost);color:var(--accent2)}button.primary{background:var(--accent)}button.danger{background:var(--danger)}button:disabled{opacity:.6;cursor:not-allowed}
-.wrap{display:grid;gap:14px;padding:12px env(safe-area-inset-right) 24px env(safe-area-inset-left);max-width:1200px;margin:0 auto;grid-template-columns:1fr}
+.wrap{
+  display:grid;
+  gap:14px;
+  padding:12px env(safe-area-inset-right) calc(24px + env(safe-area-inset-bottom)) env(safe-area-inset-left);
+  max-width:1200px;
+  margin:0 auto;
+  grid-template-columns:1fr;
+}
+
 @media(min-width:920px){.wrap{grid-template-columns:1fr 1fr}.doors,.path{grid-column:1/-1}}
 .panel{background:linear-gradient(180deg,#1b1f3a 0%,#161a33 100%);border:1px solid #2b2f59;border-radius:14px;padding:12px;box-shadow:0 10px 30px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.05)}
 .panel h2{margin:4px 0 10px;font-size:1rem;color:#cdd1ff}.info{display:flex;flex-wrap:wrap;gap:12px;align-items:center}.status{flex:1 1 100%;margin-top:4px;padding:8px 10px;background:#0f1335;border-radius:10px;border:1px solid #2b2f59;min-height:36px}
