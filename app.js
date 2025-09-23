@@ -94,13 +94,19 @@ function refillHand(){
 }
 
 function drawUpToFive(){
-  while(S.hand.length < HAND_SIZE){
-    const c=drawTop(); if(!c) break;
-    if(c.type==='door'||c.type==='nightmare'){ toLimbo(c); continue; }
+  // Avausnosto ja "heitä koko käsi" -rangaistuksen nosto:
+  // Nosta kunnes kädessä on 5 Paikkakorttia (aur/kuu/avain).
+  // Ovet ja Painajaiset menevät sivuun (limboon), niitä ei ratkaista tässä.
+  while (S.hand.length < HAND_SIZE){
+    const c = drawTop(); if(!c) break;
+    if (c.type === 'door' || c.type === 'nightmare') { toLimbo(c); continue; }
     S.hand.push(c);
   }
-  reshuffleLimbo(); checkLossAfterDraw();
+  // Kun käsi on viidessä, limbo sekoitetaan takaisin pakkaan.
+  reshuffleLimbo();
+  checkLossAfterDraw();
 }
+
 
 // ---- Door discovery on path
 function checkDiscoverDoor(){
