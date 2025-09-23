@@ -1,16 +1,23 @@
 :root{--bg:#0f1128;--ink:#ecf0ff;--panel:#1b1f3a;--accent:#4e56b9;--accent2:#c4c8ff;--danger:#b53a3a;--ghost:#2a2e57;--cardBorder:#303565;--red:#d95555;--blue:#5aa3e6;--green:#66c19a;--brown:#c59a6b;--sun:#fff0a8;--moon:#bfe1ff;--key:#bff8bf;--door:#ffc2c2;--night:#000}
-*{box-sizing:border-box}html,body{height:100%}body{margin:0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:radial-gradient(1200px 800px at 50% -10%,#20245a 0%,#121433 60%,#0b0d22 100%);color:var(--ink)}
-.topbar{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:linear-gradient(180deg,#1e234b,#141739);position:sticky;top:env(safe-area-inset-top);z-index:10}.title{font-weight:700;letter-spacing:.4px}.actions{display:flex;gap:8px}
+*{box-sizing:border-box}html,body{height:100% ; background-color: #0b0d22; }body{margin:0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:radial-gradient(1200px 800px at 50% -10%,#20245a 0%,#121433 60%,#0b0d22 100%);color:var(--ink)}
+.topbar{
+  position: sticky;
+  top: 0; /* <-- tämä, ei env(...) */
+  padding: calc(10px + env(safe-area-inset-top)) 14px 10px 14px;
+  z-index: 10;
+}
 button{appearance:none;border:none;border-radius:10px;padding:10px 14px;font-weight:600;background:var(--accent);color:#fff;cursor:pointer;touch-action:manipulation}
 button.ghost{background:var(--ghost);color:var(--accent2)}button.primary{background:var(--accent)}button.danger{background:var(--danger)}button:disabled{opacity:.6;cursor:not-allowed}
-.wrap{
-  display:grid;
-  gap:14px;
-  padding:12px env(safe-area-inset-right) calc(24px + env(safe-area-inset-bottom)) env(safe-area-inset-left);
-  max-width:1200px;
-  margin:0 auto;
-  grid-template-columns:1fr;
+:root{
+  --topbarH: 60px; /* säädä vastaamaan todellista korkeutta */
 }
+.wrap{
+  margin-top: calc(var(--topbarH) + env(safe-area-inset-top));
+  padding: 12px env(safe-area-inset-right)
+           calc(24px + env(safe-area-inset-bottom))
+           env(safe-area-inset-left);
+}
+
 
 @media(min-width:920px){.wrap{grid-template-columns:1fr 1fr}.doors,.path{grid-column:1/-1}}
 .panel{background:linear-gradient(180deg,#1b1f3a 0%,#161a33 100%);border:1px solid #2b2f59;border-radius:14px;padding:12px;box-shadow:0 10px 30px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.05)}
@@ -30,3 +37,9 @@ button.ghost{background:var(--ghost);color:var(--accent2)}button.primary{backgro
 #prophecyDlg .controls-fixed{display:flex;gap:10px;align-items:center;justify-content:center;margin:8px 0}
 dialog{border:none;border-radius:14px;padding:16px;background:#171a36;color:var(--ink);max-width:min(680px,96vw);box-shadow:0 24px 60px rgba(0,0,0,.5)}dialog::backdrop{background:rgba(0,0,0,.5)}
 dialog h3{margin-top:0}.col{display:flex;flex-direction:column;gap:10px}.row{margin-top:8px}
+@supports (height: 100dvh) {
+  body { min-height: 100dvh; }
+}
+@supports not (height: 100dvh) {
+  body { min-height: -webkit-fill-available; }
+}
