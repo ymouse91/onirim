@@ -94,19 +94,13 @@ function refillHand(){
 }
 
 function drawUpToFive(){
-  // Avausnosto ja "heitä koko käsi" -rangaistuksen nosto:
-  // Nosta kunnes kädessä on 5 Paikkakorttia (aur/kuu/avain).
-  // Ovet ja Painajaiset menevät sivuun (limboon), niitä ei ratkaista tässä.
-  while (S.hand.length < HAND_SIZE){
-    const c = drawTop(); if(!c) break;
-    if (c.type === 'door' || c.type === 'nightmare') { toLimbo(c); continue; }
+  while(S.hand.length < HAND_SIZE){
+    const c=drawTop(); if(!c) break;
+    if(c.type==='door'||c.type==='nightmare'){ toLimbo(c); continue; }
     S.hand.push(c);
   }
-  // Kun käsi on viidessä, limbo sekoitetaan takaisin pakkaan.
-  reshuffleLimbo();
-  checkLossAfterDraw();
+  reshuffleLimbo(); checkLossAfterDraw();
 }
-
 
 // ---- Door discovery on path
 function checkDiscoverDoor(){
@@ -138,19 +132,58 @@ function resolveNightmare(){
   }, {once:true});
 }
 function applyNightmareChoice(choice){
-  S.discard.push(makeCard('nightmare'));
+  S.discard.push(makeCard('nightmare'));										
   switch(choice){
     case 'loseDoor':{
-      if(!S.doors.length){ if(discardOneKeyFromHand()) break; else if(millTop5()) break; else { discardWholeHandAndRefill(); break; } }
+      // handled via door picker; it will reshuffle & refill in its close handler
       openDoorPickDialog(); return;
     }
-    case 'discardKey':{ if(!discardOneKeyFromHand()){ if(millTop5()) break; else { discardWholeHandAndRefill(); break; } } break; }
-    case 'mill5':{ millTop5(); break; }
-    case 'discardHand':{ discardWholeHandAndRefill(); break; }
-    default:{ if(discardOneKeyFromHand()) break; else if(millTop5()) break; else { discardWholeHandAndRefill(); break; } }
+    case 'discardKey':{
+      if(!discardOneKeyFromHand()){
+        if (millTop5()){
+        reshuffleLimbo(); drawUpToFive();
+        render('Painajainen: 5 korttia paljastettu.');
+        return;
+      }
+        // fallback to discard hand
+        if (typeof _refilling!=='undefined') _refilling=false;
+      S.discard.push(...S.hand);
+      S.hand = [];
+      drawUpToFive();
+      render('Painajainen: käsi heitetty ja uusi 5 kortin käsi nostettu.');
+      return;
+      }
+      reshuffleLimbo(); refillHand(); render('Painajainen: avain heitetty.'); return;
+    }
+    case 'mill5':{
+      millTop5(); reshuffleLimbo(); drawUpToFive(); render('Painajainen: 5 korttia paljastettu.'); return;
+    }
+    case 'discardHand':{
+      if (typeof _refilling!=='undefined') _refilling=false;
+      S.discard.push(...S.hand);
+      S.hand = [];
+      drawUpToFive(); // opening-hand rule; no nightmare resolution here
+      render('Painajainen: käsi heitetty ja uusi 5 kortin käsi nostettu.');
+      return;
+    }
+    default:{
+      // default order: discard key -> mill5 -> discard hand
+      if (discardOneKeyFromHand()){ reshuffleLimbo(); refillHand(); render('Painajainen: avain heitetty.'); return; }
+      if (millTop5()){
+        reshuffleLimbo(); drawUpToFive();
+        render('Painajainen: 5 korttia paljastettu.');
+        return;
+      }
+      if (typeof _refilling!=='undefined') _refilling=false;
+      S.discard.push(...S.hand);
+      S.hand = [];
+      drawUpToFive();
+      render('Painajainen: käsi heitetty ja uusi 5 kortin käsi nostettu.');
+      return;
+    }
   }
-  reshuffleLimbo(); refillHand(); render('Painajainen ratkaistu.');
 }
+
 function openDoorPickDialog(){
   D.doorChoices.innerHTML='';
   S.doors.forEach((d,idx)=>{
