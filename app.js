@@ -1,329 +1,434 @@
-
-/* Onirim PWA – v4.4f */
+/* Onirim PWA – auto-refill + stopper-loss + correct door supply + non-removing path + 12-path-render + hard cap discard + win-on-key (2025-09-25) */
 const COLORS = ["red","blue","green","brown"];
-const DOORS_TO_WIN = 8;
 const HAND_SIZE = 5;
-const $ = (s)=>document.querySelector(s);
+const DOORS_TO_WIN = 8;
+const $ = (sel)=>document.querySelector(sel);
 
+/* ---------- Utilities ---------- */
 function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; [a[i],a[j]]=[a[j],a[i]]; } return a; }
-function makeCard(type,color=null){ return {type,color}; }
-function colorAbbrFi(c){ return ({red:'pun', blue:'sin', green:'vih', brown:'rus'})[c]||''; }
+function makeCard(type,color=null,symbol=null){ return {type,color,symbol}; }
+function cardLabel(c){
+  if(c.type==='sun'||c.type==='moon'||c.type==='key'){
+    const sym=c.type==='sun'?'☼':(c.type==='moon'?'☾':'🗝️'); return `${sym} ${c.color||''}`;
+  }
+  if(c.type==='door') return `Ovi ${c.color||''}`;
+  if(c.type==='nightmare') return 'Painajainen';
+  return c.type;
+}
 
-const S = { deck:[], discard:[], limbo:[], hand:[], path:[], doors:[], selectedHand:null, prophecy:null, gameOver:false };
+/* ---------- State ---------- */
+const S = {
+  deck:[], discard:[], limbo:[], hand:[], path:[], doors:[],
+  selectedHand:null, prophecy:null, gameOver:false,
+  tailColor:null, tailRunLen:0, tailOpenedGroups:0
+};
+
+/* ---------- DOM ---------- */
 const D = {
-  deckCount: $('#deckCount'), discardCount: $('#discardCount'), limboCount: $('#limboCount'), keysInHand: $('#keysInHand'), status: $('#status'),
+  deckCount: $('#deckCount'), discardCount: $('#discardCount'), limboCount: $('#limboCount'),
+  keysInHand: $('#keysInHand'), nmCount: $('#nmCount'),
+  status: $('#status'),
   doorsArea: $('#doorsArea'), pathArea: $('#pathArea'), handArea: $('#handArea'), discardPeek: $('#discardPeek'),
   newBtn: $('#newBtn'), helpBtn: $('#helpBtn'), helpDlg: $('#helpDlg'), closeHelp: $('#closeHelp'),
   nightmareDlg: $('#nightmareDlg'), pickDoorDlg: $('#pickDoorDlg'), doorChoices: $('#doorChoices'),
-  keyProphecyBtn: $('#keyProphecyBtn'), discardSelBtn: $('#discardSelBtn'), playSelBtn: $('#playSelBtn'), resumeDrawBtn: $('#resumeDrawBtn'),
-  prophecyDlg: $('#prophecyDlg'), prophecyCards: $('#prophecyCards'), propLeft: $('#propLeft'), propRight: $('#propRight')
+  keyProphecyBtn: $('#keyProphecyBtn'), discardSelBtn: $('#discardSelBtn'), playSelBtn: $('#playSelBtn'),
+  prophecyDlg: $('#prophecyDlg'), prophecyCards: $('#prophecyCards'), propLeft: $('#propLeft'), propRight: $('#propRight'),
 };
 
+/* ---------- Deck ---------- */
 function buildDeck(){
   const d=[];
-  for(const c of COLORS){ d.push(makeCard('door',c), makeCard('door',c)); }
+  for(const c of COLORS) d.push(makeCard('door',c), makeCard('door',c));
   for(let i=0;i<10;i++) d.push(makeCard('nightmare'));
-  for(const c of COLORS){ for(let i=0;i<3;i++) d.push(makeCard('key',c)); }
-  for(const c of COLORS){ for(let i=0;i<4;i++) d.push(makeCard('moon',c)); }
-  const suns={red:9, blue:8, green:7, brown:6};
-  for(const c of COLORS){ for(let i=0;i<suns[c];i++) d.push(makeCard('sun',c)); }
-  return d;
+  for(const c of COLORS) for(let i=0;i<3;i++) d.push(makeCard('key',c,'key'));
+  for(const c of COLORS) for(let i=0;i<4;i++) d.push(makeCard('moon',c,'moon'));
+  const suns={red:9,blue:8,green:7,brown:6};
+  for(const c of COLORS) for(let i=0;i<suns[c];i++) d.push(makeCard('sun',c,'sun'));
+  return d; // 76
 }
 
-function newGame(){
-  Object.assign(S,{ deck:shuffle(buildDeck()), discard:[], limbo:[], hand:[], path:[], doors:[], selectedHand:null, prophecy:null, gameOver:false });
-  drawUpToFive(); refillHand();
-  render('Uusi peli alkoi. Avaa 8 ovea ennen kuin pakka loppuu!');
+/* ---------- Render ---------- */
+function el(tag, cls, text){ const e=document.createElement(tag); if(cls) e.className=cls; if(text!=null) e.textContent=text; return e; }
+function renderCard(c, size='normal'){
+  const cls=['card',c.type]; if(c.owned) cls.push('owned'); if(size==='small') cls.push('small'); if(size==='tiny') cls.push('tiny');
+  const card=el('div', cls.join(' '));
+  const sym=el('div', `sym ${c.type}`); card.appendChild(sym);
+  if(c.color){ const stripe=el('div', `colorStripe ${c.color}`); card.appendChild(stripe); card.dataset.color=c.color; }
+  if(c.symbol && (c.type==='sun'||c.type==='moon'||c.type==='key')){ card.classList.add('badge'); card.setAttribute('data-sym', c.symbol.toUpperCase()); }
+  card.dataset.type=c.type; card.title=cardLabel(c); return card;
 }
-
-function drawTop(){ return S.deck.pop()||null; }
-
-function putOnTop(c){ S.deck.push(c); }
-function toLimbo(card){
-  S.limbo.push(card);
-  const abbr = card.color ? ({red:'pun',blue:'sin',green:'vih',brown:'rus'})[card.color] : '';
-  if(card.type==='door') D.status.textContent = `Ovi (${abbr}) meni limboon.`;
-  else if(card.type==='nightmare') D.status.textContent = 'Painajainen meni limboon.';
+function renderStatusCounts(){
+  if(D.deckCount) D.deckCount.textContent=S.deck.length;
+  if(D.discardCount) D.discardCount.textContent=S.discard.length;
+  if(D.limboCount) D.limboCount.textContent=S.limbo.length;
+  if(D.keysInHand) D.keysInHand.textContent=S.hand.filter(c=>c.type==='key').length;
+  if(D.nmCount) D.nmCount.textContent = S.deck.filter(c=>c.type==='nightmare').length;
 }
-function reshuffleLimbo(){ if(S.limbo.length){ S.deck.push(...S.limbo); S.limbo=[]; shuffle(S.deck); } }
-function checkLossAfterDraw(){
-  if(S.gameOver) return;
-  if(S.hand.length<HAND_SIZE && S.deck.length===0 && S.limbo.length===0){
-    S.gameOver=true; render('Hävisit – pakka loppui eikä kättä voi nostaa viiteen. 😵');
+function renderAreas(){
+  D.doorsArea.innerHTML=''; S.doors.forEach(d=>D.doorsArea.appendChild(renderCard({...d,owned:true},'small')));
+
+  D.pathArea.innerHTML='';
+  const MAX_PATH_SHOWN=12;
+  const hidden=Math.max(0,S.path.length-MAX_PATH_SHOWN);
+  const start=Math.max(0,S.path.length-MAX_PATH_SHOWN);
+  if(hidden>0){ const hint=el('div','pathHint',`(+${hidden} aiempaa)`); D.pathArea.appendChild(hint); }
+  for(let i=start;i<S.path.length;i++) D.pathArea.appendChild(renderCard(S.path[i],'small'));
+
+  D.handArea.innerHTML='';
+  S.hand.forEach((c,i)=>{
+    const n=renderCard(c);
+    if(S.selectedHand===i) n.style.outline='3px solid #fff';
+    n.addEventListener('click',()=>{ S.selectedHand=(S.selectedHand===i?null:i); renderAreas(); });
+    D.handArea.appendChild(n);
+  });
+
+  D.discardPeek.innerHTML='';
+  const n=Math.min(6,S.discard.length);
+  for(let i=S.discard.length-n;i<S.discard.length;i++){
+    if(i<0) continue;
+    D.discardPeek.appendChild(renderCard(S.discard[i],'tiny'));
   }
 }
+function render(msg){ if(D.status && msg) D.status.textContent=msg; renderStatusCounts(); renderAreas(); }
 
-// ---- Robust refill pipeline + impossible-state detection
-let _refilling=false;
-function onlyStoppersLeft(){
-  const left=S.deck.concat(S.limbo);
-  return left.length>0 && left.every(c=>c.type==='door'||c.type==='nightmare');
+/* ---------- Win/Loss ---------- */
+function hasKeyInHand(){ return S.hand.some(c=>c.type==='key'); }
+function checkWin(){
+  if(S.doors.length>=DOORS_TO_WIN){
+    S.gameOver=true;
+    render('Voitto! Avasit kaikki 8 ovea.');
+    return true;
+  }
+  return false;
 }
-function noMatchingKeys(){
-  const doorColors=new Set(S.deck.concat(S.limbo).filter(c=>c.type==='door').map(c=>c.color));
-  const handKeyColors=new Set(S.hand.filter(c=>c.type==='key').map(c=>c.color));
-  for(const col of handKeyColors){ if(doorColors.has(col)) return false; }
+function onlyStoppersLeft(){ return S.deck.length>0 && S.deck.every(c=>c.type==='door'||c.type==='nightmare'); }
+function noMatchingKeysInHand(){
+  const keyColors=new Set(S.hand.filter(c=>c.type==='key').map(c=>c.color));
+  const doorColors=new Set(S.deck.filter(c=>c.type==='door').map(c=>c.color));
+  for(const col of keyColors){ if(doorColors.has(col)) return false; }
   return true;
 }
-function refillHand(){
-  if(S.gameOver||_refilling) return; _refilling=true;
-  const step=()=>{
-    if(S.gameOver){ _refilling=false; return; }
-    if(S.hand.length>=HAND_SIZE){ reshuffleLimbo(); _refilling=false; renderStatusCounts(); return; }
-    if(S.hand.length < HAND_SIZE && onlyStoppersLeft() && noMatchingKeys()){
-      S.gameOver=true; render('Pakka sisältää vain ovia/painajaisia eikä kädessä ole sopivia avaimia – peli päättyi tappiolla.');
-      _refilling=false; return;
-    }
-    const c=drawTop();
-    if(!c){ reshuffleLimbo(); if(S.hand.length < HAND_SIZE && onlyStoppersLeft() && noMatchingKeys()){ S.gameOver=true; render('Pakka sisältää vain ovia/painajaisia eikä kädessä ole sopivia avaimia – peli päättyi tappiolla.'); _refilling=false; return; } checkLossAfterDraw(); _refilling=false; renderStatusCounts(); return; }
-    if(c.type==='door'){
-      const idx=S.hand.findIndex(k=>k.type==='key'&&k.color===c.color);
-      if(idx>=0){ S.discard.push(S.hand.splice(idx,1)[0]); S.doors.push({color:c.color}); renderStatusCounts(`Avasit ${colorAbbrFi(c.color)} oven Avaimella.`); setTimeout(step,0); }
-      else { toLimbo(c); setTimeout(step,0); }
-      return;
-    }
-    if(c.type==='nightmare'){
-      const after=()=>{ setTimeout(step,0); };
-      D.nightmareDlg.addEventListener('close', after, {once:true});
-      resolveNightmare();
-      return;
-    }
-    S.hand.push(c); setTimeout(step,0);
-  };
-  setTimeout(step,0);
+function checkLossAfterDraw(){
+  if(S.hand.length<HAND_SIZE && S.deck.length===0){ S.gameOver=true; render('Et pysty täydentämään kättä 5:een – hävisit.'); return true; }
+  if(onlyStoppersLeft() && noMatchingKeysInHand()){ S.gameOver=true; render('Pakka sisältää vain ovia/painajaisia eikä kädessä ole sopivia avaimia – hävisit.'); return true; }
+  return false;
 }
 
+/* ---------- Limbo ---------- */
+function toLimbo(card){ S.limbo.push(card); renderStatusCounts(); }
+function reshuffleLimboIntoDeckTop(){
+  if(!S.limbo.length) return;
+  // Sekoita limbo koko pakan sekaan – ei pakan päälle
+  S.deck = shuffle([...S.deck, ...S.limbo]);
+  S.limbo.length = 0;
+  renderStatusCounts();
+}
+/* ---------- Door supply helpers ---------- */
+function takeDoorFromSupply(color){
+  let idx=S.deck.findIndex(c=>c.type==='door'&&c.color===color);
+  if(idx>=0){ const [d]=S.deck.splice(idx,1); return d; }
+  idx=S.limbo.findIndex(c=>c.type==='door'&&c.color===color);
+  if(idx>=0){ const [d]=S.limbo.splice(idx,1); return d; }
+  return null;
+}
+function openedOfColor(color){ return S.doors.filter(d=>d.type==='door'&&d.color===color).length; }
+
+/* ---------- Draw ---------- */
+function drawTop(){ return S.deck.pop()||null; }
 function drawUpToFive(){
-  while(S.hand.length < HAND_SIZE){
+  while(S.hand.length<HAND_SIZE){
     const c=drawTop(); if(!c) break;
     if(c.type==='door'||c.type==='nightmare'){ toLimbo(c); continue; }
     S.hand.push(c);
   }
-  reshuffleLimbo(); checkLossAfterDraw();
+  reshuffleLimboIntoDeckTop(); renderAreas(); checkLossAfterDraw();
 }
 
-// ---- Door discovery on path
-function checkDiscoverDoor(){
-  if(S.path.length<3) return;
-  const a=S.path[S.path.length-3], b=S.path[S.path.length-2], c=S.path[S.path.length-1];
-  if(a.color===b.color && b.color===c.color){
-    const color=a.color, owned=S.doors.filter(d=>d.color===color).length;
-    if(owned<2){
-      const idx=S.deck.findIndex(k=>k.type==='door'&&k.color===color);
-      if(idx>=0){ S.deck.splice(idx,1); S.doors.push({color}); shuffle(S.deck); renderStatusCounts(`Löysit ${colorAbbrFi(color)} oven polkusarjalla – pakka sekoitettiin.`); }
-    }
-  }
-}
+/* ---------- Refill loop ---------- */
+let _refilling=false;
+function refillHand(){
+  if(_refilling||S.gameOver) return;
+  _refilling=true;
 
-// ---- Nightmare
-function resolveNightmare(){
-  const hasDoor = S.doors.length > 0;
-  const hasKey  = S.hand.some(c=>c.type==='key');
-  const loseDoorBtn = D.nightmareDlg.querySelector('button[value=\"loseDoor\"]');
-  const discardKeyBtn = D.nightmareDlg.querySelector('button[value=\"discardKey\"]');
-  if(loseDoorBtn) loseDoorBtn.disabled = !hasDoor;
-  if(discardKeyBtn) discardKeyBtn.disabled = !hasKey;
-  D.nightmareDlg.returnValue=''; D.nightmareDlg.showModal();
-  D.nightmareDlg.addEventListener('close', ()=>{
-    const choice=D.nightmareDlg.returnValue||'';
-    if(choice==='loseDoor' && !S.doors.length){ render('Et voi siirtää ovea Limboon, koska ovia ei ole avattu.'); resolveNightmare(); return; }
-    if(choice==='discardKey' && !S.hand.some(c=>c.type==='key')){ render('Et voi heittää Avainta, koska kädessä ei ole avaimia.'); resolveNightmare(); return; }
-    applyNightmareChoice(choice);
-  }, {once:true});
-}
-function applyNightmareChoice(choice){
-  S.discard.push(makeCard('nightmare'));										
-  switch(choice){
-    case 'loseDoor':{
-      // handled via door picker; it will reshuffle & refill in its close handler
-      openDoorPickDialog(); return;
+  const step=()=>{
+    if(S.gameOver){ _refilling=false; return; }
+    if(onlyStoppersLeft() && noMatchingKeysInHand()){ _refilling=false; checkLossAfterDraw(); return; }
+
+    if(S.hand.length>=HAND_SIZE){
+      reshuffleLimboIntoDeckTop();
+      _refilling=false;
+      renderAreas();
+      checkWin();
+      return;
     }
-    case 'discardKey':{
-      if(!discardOneKeyFromHand()){
-        if (millTop5()){
-        reshuffleLimbo(); drawUpToFive();
-        render('Painajainen: 5 korttia paljastettu.');
+
+    const c=drawTop();
+    if(!c){
+      reshuffleLimboIntoDeckTop();
+      _refilling=false;
+      renderAreas();
+      checkLossAfterDraw();
+      return;
+    }
+
+    if(c.type==='door'){
+      if(openedOfColor(c.color) >= 2){
+        S.discard.push(c); // ylimääräinen ovi poistoon, ei limboon
+        render(`Ylimääräinen ${c.color} ovi poistettiin pakasta.`);
+        setTimeout(step,0);
         return;
       }
-        // fallback to discard hand
-        if (typeof _refilling!=='undefined') _refilling=false;
-      S.discard.push(...S.hand);
-      S.hand = [];
-      drawUpToFive();
-      render('Painajainen: käsi heitetty ja uusi 5 kortin käsi nostettu.');
-      return;
+      const k=S.hand.findIndex(x=>x.type==='key' && x.color===c.color);
+      if(k>=0){
+        const key=S.hand.splice(k,1)[0];
+        S.discard.push(key);
+        S.doors.push({...c,owned:true});
+        render(`Avasit oven (${c.color}) Avaimella.`);
+        if(checkWin()){ _refilling=false; return; }   // <-- ratkaiseva lisäys
+        setTimeout(step,0);
+      }else{
+        toLimbo(c);
+        setTimeout(step,0);
       }
-      reshuffleLimbo(); refillHand(); render('Painajainen: avain heitetty.'); return;
-    }
-    case 'mill5':{
-      millTop5(); reshuffleLimbo(); drawUpToFive(); render('Painajainen: 5 korttia paljastettu.'); return;
-    }
-    case 'discardHand':{
-      if (typeof _refilling!=='undefined') _refilling=false;
-      S.discard.push(...S.hand);
-      S.hand = [];
-      drawUpToFive(); // opening-hand rule; no nightmare resolution here
-      render('Painajainen: käsi heitetty ja uusi 5 kortin käsi nostettu.');
       return;
     }
-    default:{
-      // default order: discard key -> mill5 -> discard hand
-      if (discardOneKeyFromHand()){ reshuffleLimbo(); refillHand(); render('Painajainen: avain heitetty.'); return; }
-      if (millTop5()){
-        reshuffleLimbo(); drawUpToFive();
-        render('Painajainen: 5 korttia paljastettu.');
-        return;
-      }
-      if (typeof _refilling!=='undefined') _refilling=false;
-      S.discard.push(...S.hand);
-      S.hand = [];
-      drawUpToFive();
-      render('Painajainen: käsi heitetty ja uusi 5 kortin käsi nostettu.');
+
+    if(c.type==='nightmare'){
+      S.discard.push(makeCard('nightmare'));
+      showNightmareDialog().then(choice=>{
+        resolveNightmare(choice).then(()=>setTimeout(step,0));
+      });
       return;
     }
-  }
+
+    S.hand.push(c);
+    renderAreas();
+    setTimeout(step,0);
+  };
+
+  step();
 }
 
-function openDoorPickDialog(){
-  D.doorChoices.innerHTML='';
-  S.doors.forEach((d,idx)=>{
-    const n=uiCard('door',d.color,'tiny');
-    n.addEventListener('click',()=>{ const [rm]=S.doors.splice(idx,1); toLimbo(makeCard('door',rm.color)); D.pickDoorDlg.close('ok'); });
-    D.doorChoices.appendChild(n);
+/* ---------- Nightmares ---------- */
+function prepareNightmareButtons(dlg){
+  const btnLose=dlg.querySelector('button[value="loseDoor"]');
+  const btnKey=dlg.querySelector('button[value="discardKey"]');
+  if(btnLose) btnLose.disabled=(S.doors.length===0);
+  if(btnKey) btnKey.disabled=!hasKeyInHand();
+}
+function showNightmareDialog(){
+  return new Promise(resolve=>{
+    const dlg=D.nightmareDlg;
+    prepareNightmareButtons(dlg);
+    dlg.returnValue='';
+    dlg.showModal();
+    dlg.addEventListener('close', function onClose(){
+      dlg.removeEventListener('close', onClose);
+      resolve(dlg.returnValue||'cancel');
+    }, {once:true});
   });
-  D.pickDoorDlg.returnValue=''; D.pickDoorDlg.showModal();
-  D.pickDoorDlg.addEventListener('close',()=>{ if(!S.limbo.some(k=>k.type==='door') && !S.doors.length){ if(millTop5()){} else discardWholeHandAndRefill(); } reshuffleLimbo(); refillHand(); render('Painajainen ratkaistu.'); }, {once:true});
 }
-function discardOneKeyFromHand(){ const i=S.hand.findIndex(c=>c.type==='key'); if(i>=0){ S.discard.push(S.hand.splice(i,1)[0]); return true; } return false; }
-function millTop5(){ let any=false; for(let i=0;i<5;i++){ const c=drawTop(); if(!c) break; any=true; if(c.type==='door'||c.type==='nightmare'){ toLimbo(c);} else { S.discard.push(c);} } return any; }
-function discardWholeHandAndRefill(){ S.discard.push(...S.hand); S.hand=[]; refillHand(); }
-
-// ---- Prophecy (Key)
-function useKeyProphecy(){
-  try{ if(typeof _refilling!=='undefined') _refilling=false; }catch(e){}
-  const selected = (S.selectedHand!=null) ? S.hand[S.selectedHand] : null;
-  let idx = -1;
-  if (selected && selected.type==='key') idx = S.selectedHand;
-  else idx = S.hand.findIndex(c=>c.type==='key');
-  const keysInHand = S.hand.filter(c=>c.type==='key').length;
-  if(idx < 0){ renderStatusCounts(keysInHand===0 ? 'Kädessä ei ole Avainta.' : `Avaimia havaittu ${keysInHand}, mutta yksikään ei ole valittuna.`); return; }
-  const key = S.hand.splice(idx,1)[0]; S.selectedHand=null; S.discard.push(key);
-  const cards=[]; for(let i=0;i<5;i++){ const c=drawTop(); if(!c) break; cards.push(c); }
-  S.prophecy={cards, removeIndex:null};
-  openProphecyDialog();
-}
-
-function openProphecyDialog(){
-  const P=S.prophecy; if(!P){ render(); return; }
-  function renderProphecyCards(){
-    D.prophecyCards.innerHTML='';
-    P.cards.forEach((c,idx)=>{
-      const n=uiCard(c.type,c.color,'tiny');
-      n.addEventListener('click',()=>{ P.removeIndex=(P.removeIndex===idx?null:idx); renderProphecyCards(); wireProphecyArrows(renderProphecyCards); });
-      if(idx===P.removeIndex) n.style.outline='3px solid #ff66ff';
-      D.prophecyCards.appendChild(n);
+function showPickDoorDialog(){
+  return new Promise(resolve=>{
+    D.doorChoices.innerHTML='';
+    S.doors.forEach((d,i)=>{
+      const n=renderCard(d,'small');
+      n.style.cursor='pointer';
+      n.addEventListener('click', ()=>{ resolve(i); D.pickDoorDlg.close('pick'); });
+      D.doorChoices.appendChild(n);
     });
+    D.pickDoorDlg.returnValue='';
+    D.pickDoorDlg.showModal();
+    D.pickDoorDlg.addEventListener('close', function onClose(){
+      D.pickDoorDlg.removeEventListener('close', onClose);
+      if(D.pickDoorDlg.returnValue!=='pick') resolve(null);
+    }, {once:true});
+  });
+}
+function discardOneKeyFromHand(){
+  const i=S.hand.findIndex(c=>c.type==='key');
+  if(i>=0){ S.discard.push(S.hand.splice(i,1)[0]); return true; }
+  return false;
+}
+function millTop5(){
+  const revealed=[];
+  for(let i=0;i<5;i++){ const c=drawTop(); if(!c) break; revealed.push(c); }
+  let any=false;
+  for(const c of revealed){
+    if(c.type==='door'||c.type==='nightmare'){ toLimbo(c); any=true; }
+    else S.discard.push(c);
   }
-  renderProphecyCards();
-  wireProphecyArrows(renderProphecyCards);
-  D.prophecyDlg.returnValue=''; D.prophecyDlg.showModal();
-  D.prophecyDlg.addEventListener('close',()=>{
-    const val=D.prophecyDlg.returnValue;
-    if(val==='confirm'){
-      if(P.removeIndex==null){ D.status.textContent='Valitse ensin poistettava kortti Ennustuksessa.'; openProphecyDialog(); return; }
-      commitProphecy();
-    } else {
-      for(let i=P.cards.length-1;i>=0;i--) putOnTop(P.cards[i]);
-      S.prophecy=null; refillHand(); render('Ennustus peruttu.');
+  render('Paljastettu 5 korttia.');
+  return any;
+}
+async function resolveNightmare(choice){
+  if(choice==='loseDoor'){
+    if(S.doors.length){
+      const idx=await showPickDoorDialog();
+      if(idx!=null){
+        const d=S.doors.splice(idx,1)[0];
+        toLimbo(d);
+        reshuffleLimboIntoDeckTop();
+        render('Painajainen: yksi ovi siirrettiin limboon.');
+        return;
+      }
     }
-  }, {once:true});
-}
-function wireProphecyArrows(rerender){
-  function setArrowState(){
-    const P=S.prophecy, L=$('#propLeft'), R=$('#propRight');
-    const hasSel = !!(P && P.removeIndex!=null);
-    if(L) L.disabled = !hasSel || (P.removeIndex===0);
-    if(R) R.disabled = !hasSel || (P.removeIndex===P.cards.length-1);
+    choice='discardKey';
   }
-  const L=$('#propLeft'), R=$('#propRight');
-  if(L){ L.onclick=()=>{ const P=S.prophecy; if(!P||P.removeIndex==null) return; if(P.removeIndex>0){ const i=P.removeIndex; [P.cards[i-1],P.cards[i]]=[P.cards[i],P.cards[i-1]]; P.removeIndex=i-1; rerender(); setArrowState(); } }; }
-  if(R){ R.onclick=()=>{ const P=S.prophecy; if(!P||P.removeIndex==null) return; if(P.removeIndex<P.cards.length-1){ const i=P.removeIndex; [P.cards[i+1],P.cards[i]]=[P.cards[i],P.cards[i+1]]; P.removeIndex=i+1; rerender(); setArrowState(); } }; }
-  setArrowState();
-}
-function commitProphecy(){
-  const P=S.prophecy; if(!P) return;
-  const removed=P.cards.splice(P.removeIndex,1)[0];
-  const abbr = (c)=> c.type==='door' ? `ovi-${colorAbbrFi(c.color)}`
-              : c.type==='nightmare' ? 'painajainen'
-              : c.type==='key' ? `avain-${colorAbbrFi(c.color)}`
-              : `${(c.type==='sun'?'aur':'kuu')}-${colorAbbrFi(c.color)}`;
-  if(removed.type==='door') toLimbo(removed); else S.discard.push(removed);
-  // Return remaining in reverse so that leftmost ends up on top
-  for(let i=P.cards.length-1;i>=0;i--){ putOnTop(P.cards[i]); }
-  const orderTxt=P.cards.map(abbr).join(' → ');
-  S.prophecy=null; refillHand(); render(`Ennustus: poistit ${abbr(removed)}; palautit järjestyksessä ${orderTxt} pakan päälle.`);
+
+  if(choice==='discardKey'){
+    if(discardOneKeyFromHand()){
+      reshuffleLimboIntoDeckTop();
+      render('Painajainen: avain heitetty.');
+      return;
+    }
+    choice='mill5';
+  }
+
+  if(choice==='mill5'){
+    millTop5();
+    reshuffleLimboIntoDeckTop();
+    drawUpToFive();
+    render('Painajainen: 5 korttia paljastettu; ovet/painajaiset limboon, muut poistoon.');
+    return;
+  }
+
+  if(choice==='discardHand'){
+    S.discard.push(...S.hand);
+    S.hand=[];
+    drawUpToFive();
+    render('Painajainen: käsi heitetty ja uusi 5 kortin käsi nostettu.');
+    return;
+  }
 }
 
-// ---- UI
-function uiCard(type,color=null,size='small'){
-  const d=document.createElement('div'); d.className=`card ${size} ${type} ${color||''} badge`; d.dataset.sym=color?colorAbbrFi(color):'';
-  const sym=document.createElement('div'); sym.className=`sym ${type}`; d.appendChild(sym);
-  const stripe=document.createElement('div'); stripe.className=`colorStripe ${color||''}`; d.appendChild(stripe);
-  return d;
+/* ---------- Path & Doors (ei siivousta) ---------- */
+function updateTailRunAndMaybeOpenDoors(newCard){
+  const c=newCard;
+  if(!c || !c.color){ S.tailColor=null; S.tailRunLen=0; S.tailOpenedGroups=0; return; }
+
+  if(S.tailColor===c.color) S.tailRunLen += 1;
+  else { S.tailColor=c.color; S.tailRunLen=1; S.tailOpenedGroups=0; }
+
+  const groupsNow = Math.floor(S.tailRunLen/3);
+
+  while(S.tailOpenedGroups < groupsNow){
+    if(openedOfColor(S.tailColor) >= 2) break;
+    const doorCard = takeDoorFromSupply(S.tailColor);
+    if(!doorCard) break;
+    S.doors.push({...doorCard, owned:true});
+    S.tailOpenedGroups += 1;
+    render(`Kolmikko samaa väriä – ${S.tailColor} ovi avautui!`);
+    renderAreas();
+    if(checkWin()) return;
+  }
 }
-function renderStatusCounts(msg){
-  D.deckCount.textContent=S.deck.length; D.discardCount.textContent=S.discard.length; D.keysInHand.textContent=S.hand.filter(c=>c.type==='key').length;
-  if(msg) D.status.textContent=msg;
-}
-function render(msg){
-  renderStatusCounts(msg);
-  D.doorsArea.innerHTML=''; for(const c of COLORS){ const owned=S.doors.filter(d=>d.color===c).length; for(let i=0;i<2;i++){ const n=uiCard('door',c); if(i<owned) n.classList.add('owned'); D.doorsArea.appendChild(n);} }
-  D.pathArea.innerHTML=''; S.path.forEach(c=> D.pathArea.appendChild(uiCard(c.type,c.color)));
-  D.handArea.innerHTML=''; S.hand.forEach((c,idx)=>{ const n=uiCard(c.type,c.color); if(idx===S.selectedHand) n.style.outline='3px solid #f8f'; n.addEventListener('click',()=>onHandClick(idx)); D.handArea.appendChild(n); });
-  D.discardPeek.innerHTML=''; S.discard.slice(-6).forEach(c=> D.discardPeek.appendChild(uiCard(c.type,c.color,'tiny')));
-  const sel=(S.selectedHand!=null)?S.hand[S.selectedHand]:null;
-  D.playSelBtn.disabled = !(sel && canPlayOnPath(sel));
-  D.keyProphecyBtn.disabled = !S.hand.some(c=>c.type==='key');
-  D.discardSelBtn.disabled = (S.selectedHand==null);
-  if(D.resumeDrawBtn) D.resumeDrawBtn.style.display = (!S.gameOver && S.hand.length < HAND_SIZE) ? '' : 'none';
-  if(S.doors.length===DOORS_TO_WIN){ S.gameOver=true; D.status.textContent='Voitit! Kaikki 8 ovea avattu. 🎉'; }
-  else if(S.deck.length===0 && S.hand.length===0){ S.gameOver=true; D.status.textContent='Hävisit – pakka loppui. 😵'; }
-}
-function canPlayOnPath(card){
-  if(!card) return false;
-  if(!(card.type==='sun'||card.type==='moon'||card.type==='key')) return false;
-  const last=S.path[S.path.length-1];
-  if(last && last.type===card.type) return false;
+
+/* ---------- Actions ---------- */
+function playSelectedToPath(){
+  if(S.gameOver) return false;
+  const i=S.selectedHand; if(i==null) return false;
+  const card=S.hand[i];
+  if(card.type==='door'||card.type==='nightmare'){ render('Et voi pelata tätä korttia polulle.'); return false; }
+
+  // ei samaa symbolia peräkkäin
+  if(S.path.length){
+    const last=S.path[S.path.length-1];
+    const symLast=(last.type==='key'?'key':last.type);
+    const symThis=(card.type==='key'?'key':card.type);
+    if(symLast===symThis){ render('Et saa pelata samaa symbolia peräkkäin polkuun.'); return false; }
+  }
+
+  S.path.push(card);
+  S.hand.splice(i,1);
+  S.selectedHand=null;
+
+  updateTailRunAndMaybeOpenDoors(card);
+
+  render('Kortti pelattu polulle.');
+  refillHand();
   return true;
 }
-function onHandClick(idx){
-  if(S.gameOver) return;
-  const c=S.hand[idx]; if(!c) return;
-  S.selectedHand = (S.selectedHand===idx?null:idx);
-  render(S.selectedHand!=null ? 'Kortti valittu. Paina: Sijoita polulle / Heitä / (Avaimella) Ennustus.' : undefined);
-}
-function playSelected(){
-  if(S.gameOver) return;
-  const i=S.selectedHand; if(i==null){ render('Valitse ensin kortti.'); return; }
-  const c=S.hand[i]; if(!canPlayOnPath(c)){ render('Tätä symbolia ei voi pelata peräkkäin.'); return; }
-  S.path.push(c); S.hand.splice(i,1); S.selectedHand=null; checkDiscoverDoor(); refillHand(); render('Kortti pelattu polkuun.');
-}
-function discardSelected(){
-  if(S.gameOver) return;
-  const i=S.selectedHand; if(i==null) return;
-  const c=S.hand[i]; S.hand.splice(i,1); S.selectedHand=null; S.discard.push(c); refillHand(); render('Kortti heitetty poistopakkaan.');
-}
-function bindUI(){
-  D.newBtn.addEventListener('click', newGame);
-  D.helpBtn.addEventListener('click', ()=>D.helpDlg.showModal());
-  D.closeHelp.addEventListener('click', ()=>D.helpDlg.close());
-  D.keyProphecyBtn.addEventListener('click', useKeyProphecy);
-  D.discardSelBtn.addEventListener('click', discardSelected);
-  D.playSelBtn.addEventListener('click', playSelected);
-  if(D.resumeDrawBtn) D.resumeDrawBtn.addEventListener('click', ()=>{ refillHand(); render('Jatketaan nostoa…'); });
+
+function discardSelectedFromHand(){
+  if(S.gameOver) return false;
+  const i=S.selectedHand; if(i==null) return false;
+  const card=S.hand.splice(i,1)[0];
+  S.selectedHand=null;
+  S.discard.push(card);
+  render('Kortti heitetty poistopakkaan.');
+  refillHand();
+  return true;
 }
 
-// ---- Boot
+/* ---------- Prophecy (Key) ---------- */
+function renderProphecy(){
+  D.prophecyCards.innerHTML='';
+  if(!S.prophecy) return;
+  S.prophecy.list.forEach((c,idx)=>{
+    const n=renderCard(c,'small');
+    if(idx===S.prophecy.sel) n.style.outline='3px solid #fff';
+    n.addEventListener('click',()=>{ S.prophecy.sel=idx; renderProphecy(); });
+    D.prophecyCards.appendChild(n);
+  });
+}
+function useKeyProphecy(){
+  if(S.gameOver) return;
+  const idx=S.hand.findIndex(c=>c.type==='key');
+  if(idx<0){ render('Kädessä ei ole Avain-korttia.'); return; }
+
+  const key=S.hand.splice(idx,1)[0];
+  S.discard.push(key);
+
+  const peek=[]; for(let i=0;i<5;i++){ const c=drawTop(); if(!c) break; peek.push(c); }
+  S.prophecy={list:peek, sel:0};
+  renderProphecy();
+
+  D.propLeft.onclick=()=>{ if(!S.prophecy) return; if(S.prophecy.sel>0){ const s=S.prophecy.sel-1; [S.prophecy.list[s],S.prophecy.list[s+1]]=[S.prophecy.list[s+1],S.prophecy.list[s]]; S.prophecy.sel=s; renderProphecy(); } };
+  D.propRight.onclick=()=>{ if(!S.prophecy) return; if(S.prophecy.sel<S.prophecy.list.length-1){ const s=S.prophecy.sel; [S.prophecy.list[s],S.prophecy.list[s+1]]=[S.prophecy.list[s+1],S.prophecy.list[s]]; S.prophecy.sel=s+1; renderProphecy(); } };
+
+  D.prophecyDlg.returnValue='';
+  D.prophecyDlg.showModal();
+
+  const onClose=()=>{
+    D.prophecyDlg.removeEventListener('close', onClose);
+    if(!S.prophecy){ renderAreas(); return; }
+    const rv=D.prophecyDlg.returnValue;
+    if(rv==='confirm'){
+      const removed=S.prophecy.list.splice(S.prophecy.sel,1)[0];
+      if(removed.type==='door') toLimbo(removed);
+      else S.discard.push(removed); // nightmare & muut
+      for(let i=S.prophecy.list.length-1;i>=0;i--) S.deck.push(S.prophecy.list[i]);
+      S.prophecy=null;
+      render('Ennustus vahvistettu.');
+      refillHand();
+    }else{
+      for(let i=S.prophecy.list.length-1;i>=0;i--) S.deck.push(S.prophecy.list[i]);
+      S.prophecy=null;
+      render('Ennustus peruttu.');
+      refillHand();
+    }
+  };
+  D.prophecyDlg.addEventListener('close', onClose, {once:true});
+}
+
+/* ---------- Boot ---------- */
+function bindUI(){
+  if(D.newBtn) D.newBtn.addEventListener('click', newGame);
+  if(D.helpBtn) D.helpBtn.addEventListener('click', ()=>D.helpDlg.showModal());
+  if(D.closeHelp) D.closeHelp.addEventListener('click', ()=>D.helpDlg.close());
+  if(D.playSelBtn) D.playSelBtn.addEventListener('click', playSelectedToPath);
+  if(D.discardSelBtn) D.discardSelBtn.addEventListener('click', discardSelectedFromHand);
+  if(D.keyProphecyBtn) D.keyProphecyBtn.addEventListener('click', useKeyProphecy);
+}
+function newGame(){
+  Object.assign(S,{
+    deck:shuffle(buildDeck()), discard:[], limbo:[], hand:[], path:[], doors:[],
+    selectedHand:null, prophecy:null, gameOver:false,
+    tailColor:null, tailRunLen:0, tailOpenedGroups:0
+  });
+  drawUpToFive();
+  render('Uusi peli: avaa 8 ovea ennen kuin pakka loppuu.');
+}
 function boot(){ bindUI(); newGame(); }
 if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', boot); } else { boot(); }
-window.addEventListener('pageshow', ()=>{ if(!S.deck || (S.deck.length===0 && S.hand.length===0 && !S.gameOver)) newGame(); });
